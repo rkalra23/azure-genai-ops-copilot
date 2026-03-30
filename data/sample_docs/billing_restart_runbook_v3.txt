@@ -1,0 +1,25 @@
+Title: Billing Service Restart Runbook
+Version: v3
+Effective Date: 2026-01-15
+Department: Operations
+Doc Type: runbook
+
+Overview:
+This document describes the approved process for restarting the billing service.
+
+Steps:
+1. Confirm no active month-end billing batch is running.
+2. Verify queue backlog is below 100 messages.
+3. Stop the service using: systemctl stop billing-service
+4. Check the latest log entries in /var/log/billing/billing-service.log
+5. Start the service using: systemctl start billing-service
+6. Validate the health endpoint at /health
+7. Confirm message consumption resumes within 5 minutes.
+
+Troubleshooting:
+- If the service does not start, verify Oracle connectivity.
+- If requests time out after restart, restart the queue-consumer service.
+- If health check remains failed for more than 10 minutes, escalate to L2 support.
+
+Escalation:
+Contact L2 support if the restart fails twice or service health remains degraded for 15 minutes.

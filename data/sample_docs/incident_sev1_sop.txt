@@ -1,0 +1,20 @@
+Title: Severity 1 Incident Handling SOP
+Version: v2
+Effective Date: 2025-11-10
+Department: SRE
+Doc Type: sop
+
+Overview:
+This SOP defines the process for handling Severity 1 incidents.
+
+Procedure:
+1. Declare Severity 1 incident.
+2. Create incident bridge within 5 minutes.
+3. Notify stakeholders and leadership.
+4. Assign incident commander.
+5. Begin mitigation and status updates every 15 minutes.
+6. Document actions and timeline.
+7. Start post-incident review within 2 business days.
+
+Escalation:
+Escalate to senior leadership if customer impact exceeds 30 minutes.

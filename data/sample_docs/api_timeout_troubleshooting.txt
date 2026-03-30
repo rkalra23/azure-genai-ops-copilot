@@ -1,0 +1,19 @@
+Title: API Timeout Troubleshooting
+Version: v1
+Effective Date: 2026-02-01
+Department: Platform
+Doc Type: troubleshooting
+
+Overview:
+This guide covers timeout issues in internal APIs.
+
+Steps:
+1. Check upstream dependency latency.
+2. Review container CPU and memory usage.
+3. Validate thread pool utilization.
+4. Inspect database slow query logs.
+5. Confirm no network policy changes were introduced.
+6. Increase timeout only after bottleneck confirmation.
+
+Notes:
+Timeout changes without root-cause analysis are not approved for production.

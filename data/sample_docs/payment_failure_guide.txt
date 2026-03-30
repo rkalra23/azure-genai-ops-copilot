@@ -1,0 +1,26 @@
+Title: Payment Failure Troubleshooting Guide
+Version: v2
+Effective Date: 2025-12-20
+Department: Support
+Doc Type: troubleshooting
+
+Overview:
+This guide explains how to troubleshoot payment processing failures.
+
+Checks:
+1. Verify payment gateway availability.
+2. Check for database connection pool exhaustion.
+3. Review timeout and retry logs.
+4. Confirm no certificate expiration issue exists.
+5. Validate downstream billing acknowledgment.
+
+Common Issues:
+- Gateway timeout
+- Invalid token exchange
+- Slow downstream acknowledgment
+- Database session exhaustion
+
+Resolution:
+- Restart payment-adapter if memory usage exceeds 85 percent.
+- Recycle stale connections.
+- Requeue failed transactions after dependency recovery.
