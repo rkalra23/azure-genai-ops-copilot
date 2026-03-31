@@ -8,7 +8,12 @@ from azure.search.documents.indexes.models import (
     SearchIndex,
     SimpleField,
     SearchableField,
+    VectorSearch,
+    HnswAlgorithmConfiguration,
+    VectorSearchProfile,
 )
+
+
 
 load_dotenv()
 SEARCH_ENDPOINT = os.getenv("AZURE_SEARCH_ENDPOINT", "")
@@ -31,10 +36,29 @@ def main() -> None:
         SimpleField(name="version", type=SearchFieldDataType.String, filterable=True),
         SimpleField(name="effective_date", type=SearchFieldDataType.String, filterable=True),
         SearchableField(name="chunk_text", type=SearchFieldDataType.String),
-        SimpleField(name="source_path", type=SearchFieldDataType.String),
+        #SimpleField(name="source_path", type=SearchFieldDataType.String),
+        SearchField(
+        name="embedding",
+        type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
+        searchable=True,
+        vector_search_dimensions=1536,
+        vector_search_profile_name="vector-profile",
+    ),
     ]
+    
+    vector_search = VectorSearch(
+    algorithms=[
+        HnswAlgorithmConfiguration(name="hnsw-config")
+    ],
+    profiles=[
+        VectorSearchProfile(
+            name="vector-profile",
+            algorithm_configuration_name="hnsw-config",
+        )
+    ],
+    )
 
-    index = SearchIndex(name=INDEX_NAME, fields=fields)
+    index = SearchIndex(name=INDEX_NAME, fields=fields,vector_search=vector_search,)
 
     existing = None
     try:

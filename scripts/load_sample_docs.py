@@ -2,18 +2,31 @@ import os
 import re
 from pathlib import Path
 from typing import Any
-from dotenv import load_dotenv
 
+from dotenv import load_dotenv
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
+from openai import AzureOpenAI
+
 load_dotenv()
 
 SEARCH_ENDPOINT = os.getenv("AZURE_SEARCH_ENDPOINT", "")
 SEARCH_API_KEY = os.getenv("AZURE_SEARCH_API_KEY", "")
 INDEX_NAME = os.getenv("AZURE_SEARCH_INDEX_NAME", "ops-docs-index")
 
+AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY", "")
+AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "")
+AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")
+AZURE_OPENAI_EMBEDDING_DEPLOYMENT = os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT", "")
+
 DOCS_DIR = Path("data/sample_docs")
 CHUNK_SIZE = 800
+
+openai_client = AzureOpenAI(
+    api_key=AZURE_OPENAI_API_KEY,
+    azure_endpoint=AZURE_OPENAI_ENDPOINT,
+    api_version=AZURE_OPENAI_API_VERSION,
+)
 
 
 def slugify(value: str) -> str:
@@ -30,7 +43,7 @@ def parse_metadata_and_body(text: str) -> tuple[dict[str, str], str]:
         "doc_type": "",
     }
 
-    body_lines = []
+    body_lines: list[str] = []
     in_metadata = True
 
     for line in lines:
@@ -79,6 +92,14 @@ def chunk_text(text: str, chunk_size: int = CHUNK_SIZE) -> list[str]:
     return chunks
 
 
+def get_embedding(text: str) -> list[float]:
+    response = openai_client.embeddings.create(
+        model=AZURE_OPENAI_EMBEDDING_DEPLOYMENT,
+        input=text,
+    )
+    return response.data[0].embedding
+
+
 def build_documents() -> list[dict[str, Any]]:
     docs: list[dict[str, Any]] = []
 
@@ -90,7 +111,12 @@ def build_documents() -> list[dict[str, Any]]:
         doc_id = slugify(title)
         chunks = chunk_text(body)
 
+        print(f"Reading file: {path}")
+        print(f"Chunks created: {len(chunks)}")
+
         for i, chunk in enumerate(chunks, start=1):
+            embedding = get_embedding(chunk)
+
             docs.append(
                 {
                     "chunk_id": f"{doc_id}-chunk-{i}",
@@ -101,7 +127,7 @@ def build_documents() -> list[dict[str, Any]]:
                     "version": metadata["version"] or "unknown",
                     "effective_date": metadata["effective_date"] or "",
                     "chunk_text": chunk,
-                    "source_path": str(path),
+                    "embedding": embedding,
                 }
             )
 
@@ -112,7 +138,12 @@ def main() -> None:
     if not SEARCH_ENDPOINT or not SEARCH_API_KEY:
         raise ValueError("Missing AZURE_SEARCH_ENDPOINT or AZURE_SEARCH_API_KEY")
 
-    client = SearchClient(
+    if not AZURE_OPENAI_API_KEY or not AZURE_OPENAI_ENDPOINT or not AZURE_OPENAI_EMBEDDING_DEPLOYMENT:
+        raise ValueError(
+            "Missing AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, or AZURE_OPENAI_EMBEDDING_DEPLOYMENT"
+        )
+
+    search_client = SearchClient(
         endpoint=SEARCH_ENDPOINT,
         index_name=INDEX_NAME,
         credential=AzureKeyCredential(SEARCH_API_KEY),
@@ -122,7 +153,7 @@ def main() -> None:
     if not docs:
         raise ValueError("No sample docs found in data/sample_docs")
 
-    results = client.upload_documents(documents=docs)
+    results = search_client.upload_documents(documents=docs)
     succeeded = sum(1 for r in results if r.succeeded)
 
     print(f"Uploaded {succeeded}/{len(docs)} documents to index '{INDEX_NAME}'.")
