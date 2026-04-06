@@ -19,3 +19,10 @@ venv/
 
 # Logs
 *.log
+
+# Generated pipeline data
+data/processed_docs/
+data/indexed_docs/
+
+# Jupyter
+.ipynb_checkpoints/

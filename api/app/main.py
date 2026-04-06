@@ -1,5 +1,6 @@
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager 
+from fastapi.middleware.cors import CORSMiddleware
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -40,6 +41,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
@@ -52,6 +60,7 @@ async def health() -> HealthResponse:
 
 @app.post("/ask", response_model=AskResponse)
 async def ask(request: AskRequest) -> AskResponse:
+    logger.info(f"Incoming request: {request}")
     return answer_question(
         request=request,
         default_mode=settings.default_retrieval_mode,

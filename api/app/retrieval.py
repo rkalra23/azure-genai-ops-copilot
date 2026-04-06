@@ -1,6 +1,8 @@
 from time import perf_counter
 from uuid import uuid4
 
+from azure.search.documents.models import VectorizedQuery
+
 from .config import get_settings
 from .llm_client import build_llm_client
 from .models import AskRequest, AskResponse, SourceItem
@@ -55,6 +57,12 @@ def _build_context_blocks(search_results) -> tuple[list[SourceItem], list[str]]:
 
     return sources, context_blocks
 
+def _get_query_embedding(llm_client, settings, text: str) -> list[float]:
+    response = llm_client.embeddings.create(
+        model=settings.azure_openai_embedding_deployment,
+        input=text,
+    )
+    return response.data[0].embedding
 
 def answer_question(request: AskRequest, default_mode: str, default_top_k: int) -> AskResponse:
     settings = get_settings()
@@ -68,11 +76,39 @@ def answer_question(request: AskRequest, default_mode: str, default_top_k: int) 
     top_k = request.top_k or default_top_k
     search_filter = _build_filter(request)
 
-    results = search_client.search(
+    if retrieval_mode == "keyword":
+        results = search_client.search(
         search_text=request.question,
         filter=search_filter,
         top=top_k,
+        )
+    else:
+        query_embedding = _get_query_embedding(
+        llm_client=llm_client,
+        settings=settings,
+        text=request.question,
     )
+
+    vector_query = VectorizedQuery(
+        vector=query_embedding,
+        k_nearest_neighbors=top_k,
+        fields="embedding",
+    )
+
+    if retrieval_mode == "vector":
+        results = search_client.search(
+            search_text=None,
+            vector_queries=[vector_query],
+            filter=search_filter,
+            top=top_k,
+        )
+    else:  # hybrid
+        results = search_client.search(
+            search_text=request.question,
+            vector_queries=[vector_query],
+            filter=search_filter,
+            top=top_k,
+        )
 
     sources, context_blocks = _build_context_blocks(results)
 

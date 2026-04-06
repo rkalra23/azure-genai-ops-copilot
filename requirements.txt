@@ -11,3 +11,4 @@ openai==1.68.2
 azure-monitor-opentelemetry==1.6.5
 
 pytest==8.3.5
+azure-storage-blob

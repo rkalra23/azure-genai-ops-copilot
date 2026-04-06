@@ -21,11 +21,54 @@ This project simulates an internal operations copilot that answers questions usi
 
 ## 🏗️ Architecture
 
-User  
-→ FastAPI  
-→ Azure AI Search (retrieve relevant chunks)  
-→ Azure OpenAI (generate grounded response)  
-→ Final Answer with Sources  
+Raw Documents (Azure Blob Storage)
+        ↓
+PySpark Pipeline (chunking + metadata extraction)
+        ↓
+Processed Documents
+        ↓
+Embedding Enrichment (Azure OpenAI)
+        ↓
+Indexed Documents
+        ↓
+Azure AI Search (Hybrid Retrieval)
+        ↓
+FastAPI Backend (RAG)
+        ↓
+Frontend UI
+---
+
+## ⚙️ Tech Stack
+
+- Backend: FastAPI (Python)
+- Frontend: HTML, CSS, JavaScript
+- Search: Azure AI Search (keyword + vector + hybrid)
+- LLM: Azure OpenAI (chat + embeddings)
+- Data Pipeline: PySpark
+- Storage: Azure Blob Storage
+
+---
+
+## 🧱 Data Pipeline
+
+This project implements a multi-stage ingestion pipeline:
+
+1. Raw documents are stored in Azure Blob Storage
+2. PySpark pipeline performs:
+   - metadata extraction
+   - document chunking
+3. Embedding enrichment using Azure OpenAI
+4. Enriched documents are indexed into Azure AI Search
+
+This design separates preprocessing, enrichment, and indexing stages, aligning with production data engineering practices.
+
+---
+
+## 📊 Observability & Production Considerations
+
+- Latency measurement for each query
+- Retrieval mode comparison (keyword vs vector vs hybrid)
+- Modular pipeline design for scalability
 
 ---
 
