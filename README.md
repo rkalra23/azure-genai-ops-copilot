@@ -21,6 +21,7 @@ This project simulates an internal operations copilot that answers questions usi
 
 ## 🏗️ Architecture
 
+```text
 Raw Documents (Azure Blob Storage)
         ↓
 PySpark Pipeline (chunking + metadata extraction)
@@ -36,7 +37,6 @@ Azure AI Search (Hybrid Retrieval)
 FastAPI Backend (RAG)
         ↓
 Frontend UI
----
 
 ## ⚙️ Tech Stack
 
