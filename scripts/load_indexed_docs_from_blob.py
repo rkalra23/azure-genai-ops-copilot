@@ -23,6 +23,9 @@ def read_indexed_docs_from_blob() -> list[dict[str, Any]]:
 
     blob_service_client = BlobServiceClient.from_connection_string(STORAGE_CONNECTION_STRING)
     container_client = blob_service_client.get_container_client(INDEXED_CONTAINER_NAME)
+    print("blob_service_client",blob_service_client)
+    print("container_client",container_client)
+    
 
     docs: list[dict[str, Any]] = []
 
@@ -50,13 +53,13 @@ def read_indexed_docs_from_blob() -> list[dict[str, Any]]:
 def main() -> None:
     if not SEARCH_ENDPOINT or not SEARCH_API_KEY:
         raise ValueError("Missing AZURE_SEARCH_ENDPOINT or AZURE_SEARCH_API_KEY")
-
+    print("hererererre")
     search_client = SearchClient(
         endpoint=SEARCH_ENDPOINT,
         index_name=INDEX_NAME,
         credential=AzureKeyCredential(SEARCH_API_KEY),
     )
-
+    print("hererererre 2")
     docs = read_indexed_docs_from_blob()
     if not docs:
         raise ValueError("No indexed docs found in Azure Blob Storage container")

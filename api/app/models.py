@@ -30,6 +30,10 @@ class AskResponse(BaseModel):
     retrieval_mode: str
     top_k: int
     latency_ms: int
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+    estimated_cost_usd: float | None = None
     sources: list[SourceItem]
 
 

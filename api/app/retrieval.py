@@ -64,6 +64,42 @@ def _get_query_embedding(llm_client, settings, text: str) -> list[float]:
     )
     return response.data[0].embedding
 
+def _estimate_chat_cost_usd(
+    prompt_tokens: int,
+    completion_tokens: int,
+    input_cost_per_1m: float,
+    output_cost_per_1m: float,
+    ) -> float:
+    input_cost = (prompt_tokens / 1_000_000) * input_cost_per_1m
+    output_cost = (completion_tokens / 1_000_000) * output_cost_per_1m
+    return round(input_cost + output_cost, 8)
+
+def _filter_search_results(search_results, retrieval_mode: str, max_per_doc: int = 2):
+    if retrieval_mode == "keyword":
+        min_score = 1.0
+    else:
+        min_score = 0.03
+        
+    filtered = []
+    per_doc_count = {}
+    
+    for item in search_results:
+        score=item.get("@search.score") or 0.0
+        doc_id = item.get("doc_id") or "unknown"
+        
+        # filter weak results
+        if score < min_score:
+            continue
+        # limit chunks per document
+        if per_doc_count.get(doc_id, 0) >= max_per_doc:
+            continue
+        
+        filtered.append(item)
+        per_doc_count[doc_id] = per_doc_count.get(doc_id, 0) + 1
+
+    return filtered
+        
+
 def answer_question(request: AskRequest, default_mode: str, default_top_k: int) -> AskResponse:
     settings = get_settings()
     search_client = build_search_client(settings)
@@ -87,30 +123,30 @@ def answer_question(request: AskRequest, default_mode: str, default_top_k: int) 
         llm_client=llm_client,
         settings=settings,
         text=request.question,
-    )
+        )
 
-    vector_query = VectorizedQuery(
+        vector_query = VectorizedQuery(
         vector=query_embedding,
         k_nearest_neighbors=top_k,
         fields="embedding",
-    )
+        )
 
-    if retrieval_mode == "vector":
-        results = search_client.search(
+        if retrieval_mode == "vector":
+            results = search_client.search(
             search_text=None,
             vector_queries=[vector_query],
             filter=search_filter,
             top=top_k,
-        )
-    else:  # hybrid
-        results = search_client.search(
+            )
+        else:  # hybrid
+            results = search_client.search(
             search_text=request.question,
             vector_queries=[vector_query],
             filter=search_filter,
             top=top_k,
-        )
-
-    sources, context_blocks = _build_context_blocks(results)
+            )
+    filtered_results = _filter_search_results(results, retrieval_mode)
+    sources, context_blocks = _build_context_blocks(filtered_results)
 
     if not context_blocks:
         latency_ms = int((perf_counter() - start) * 1000)
@@ -139,7 +175,20 @@ def answer_question(request: AskRequest, default_mode: str, default_top_k: int) 
             {"role": "user", "content": user_prompt},
         ],
         temperature=0.0,
+        
     )
+    usage = completion.usage
+    prompt_tokens = usage.prompt_tokens if usage else 0
+    completion_tokens = usage.completion_tokens if usage else 0
+    total_tokens = usage.total_tokens if usage else 0
+    
+    estimated_cost_usd = _estimate_chat_cost_usd(
+    prompt_tokens=prompt_tokens,
+    completion_tokens=completion_tokens,
+    input_cost_per_1m=settings.azure_openai_input_cost_per_1m,
+    output_cost_per_1m=settings.azure_openai_output_cost_per_1m,
+    )
+    
 
     answer = completion.choices[0].message.content or (
         "I could not find enough evidence in the indexed documents."
@@ -153,5 +202,9 @@ def answer_question(request: AskRequest, default_mode: str, default_top_k: int) 
         retrieval_mode=retrieval_mode,
         top_k=top_k,
         latency_ms=latency_ms,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+        estimated_cost_usd=estimated_cost_usd,
         sources=sources,
     )

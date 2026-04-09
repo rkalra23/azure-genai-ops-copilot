@@ -25,4 +25,5 @@ data/processed_docs/
 data/indexed_docs/
 
 # Jupyter
-.ipynb_checkpoints/
+.ipynb_checkpoints/baseline_results.json
+eval/

@@ -49,6 +49,16 @@ class Settings(BaseSettings):
         alias="DEFAULT_RETRIEVAL_MODE",
     )
     default_top_k: int = Field(default=5, alias="DEFAULT_TOP_K")
+    
+    azure_openai_input_cost_per_1m: float = Field(
+    default=0.0,
+    alias="AZURE_OPENAI_INPUT_COST_PER_1M",
+    )
+
+    azure_openai_output_cost_per_1m: float = Field(
+    default=0.0,
+    alias="AZURE_OPENAI_OUTPUT_COST_PER_1M",
+    )
 
 
 @lru_cache
