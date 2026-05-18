@@ -4,22 +4,47 @@ Effective Date: 2026-01-15
 Department: Operations
 Doc Type: runbook
 
-Overview:
-This document describes the approved process for restarting the billing service.
+## Overview
 
-Steps:
-1. Confirm no active month-end billing batch is running.
-2. Verify queue backlog is below 100 messages.
-3. Stop the service using: systemctl stop billing-service
-4. Check the latest log entries in /var/log/billing/billing-service.log
-5. Start the service using: systemctl start billing-service
-6. Validate the health endpoint at /health
-7. Confirm message consumption resumes within 5 minutes.
+This document describes the operational procedure for safely restarting the billing service after failures, maintenance windows, or timeout incidents.
 
-Troubleshooting:
+## Preconditions
+
+- Confirm no active month-end billing batch is running.
+- Verify queue backlog is below 100 messages.
+- Notify downstream support teams before restart.
+
+## Restart Procedure
+
+1. Stop the billing service:
+   systemctl stop billing-service
+
+2. Verify service shutdown completed successfully.
+
+3. Review recent logs:
+   /var/log/billing/billing-service.log
+
+4. Start the billing service:
+   systemctl start billing-service
+
+## Validation Steps
+
+1. Validate the health endpoint:
+   /health
+
+2. Confirm message consumption resumes within 5 minutes.
+
+3. Verify no backlog growth in Oracle AQ queues.
+
+## Troubleshooting
+
 - If the service does not start, verify Oracle connectivity.
 - If requests time out after restart, restart the queue-consumer service.
-- If health check remains failed for more than 10 minutes, escalate to L2 support.
+- If the health check fails for more than 10 minutes, escalate to L2 support.
 
-Escalation:
-Contact L2 support if the restart fails twice or service health remains degraded for 15 minutes.
+## Escalation
+
+Escalate to L2 support if:
+- restart fails twice
+- service remains degraded for more than 15 minutes
+- queue backlog exceeds 500 messages

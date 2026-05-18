@@ -32,9 +32,24 @@ def parse_document(content: str) -> dict:
     metadata["body"] = content
     return metadata
 
+# Bwlow is not a good approach spl when you are opting for Sematic reranking
+# def chunk_text(text: str):
+#     return [text[i:i + CHUNK_SIZE] for i in range(0, len(text), CHUNK_SIZE)]
 
 def chunk_text(text: str):
-    return [text[i:i + CHUNK_SIZE] for i in range(0, len(text), CHUNK_SIZE)]
+    sections = text.split("## ")
+
+    chunks = []
+
+    for section in sections:
+        section = section.strip()
+
+        if not section:
+            continue
+
+        chunks.append(section)
+
+    return chunks
 
 
 def main():

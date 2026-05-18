@@ -8,7 +8,9 @@ from .llm_client import build_llm_client
 from .models import AskRequest, AskResponse, SourceItem
 from .prompts import SYSTEM_PROMPT, build_user_prompt
 from .search_client import build_search_client
-
+## rerank testing
+# from .rerank import simple_rerank
+from .semantic_rerank import semantic_rerank
 
 def _build_filter(request: AskRequest) -> str | None:
     filters = []
@@ -78,10 +80,10 @@ def _filter_search_results(search_results, retrieval_mode: str, max_per_doc: int
     if retrieval_mode == "keyword":
         min_score = 1.0
     else:
-        min_score = 0.03
+        min_score = 0.015
         
     filtered = []
-    per_doc_count = {}
+    # per_doc_count = {}
     
     for item in search_results:
         score=item.get("@search.score") or 0.0
@@ -91,11 +93,11 @@ def _filter_search_results(search_results, retrieval_mode: str, max_per_doc: int
         if score < min_score:
             continue
         # limit chunks per document
-        if per_doc_count.get(doc_id, 0) >= max_per_doc:
-            continue
+        # if per_doc_count.get(doc_id, 0) >= max_per_doc:
+        #     continue
         
         filtered.append(item)
-        per_doc_count[doc_id] = per_doc_count.get(doc_id, 0) + 1
+        # per_doc_count[doc_id] = per_doc_count.get(doc_id, 0) + 1
 
     return filtered
         
@@ -145,8 +147,48 @@ def answer_question(request: AskRequest, default_mode: str, default_top_k: int) 
             filter=search_filter,
             top=top_k,
             )
+    results = list(results)
+    print("\n=== RAW RESULTS ===")
+
+    for item in results:
+        print(
+        item.get("title"),
+        item.get("chunk_id"),
+        item.get("@search.score"),
+    )
+    
     filtered_results = _filter_search_results(results, retrieval_mode)
-    sources, context_blocks = _build_context_blocks(filtered_results)
+    print("\n=== FILTERED RESULTS ===")
+
+    for item in filtered_results:
+        print(
+        item.get("title"),
+        item.get("chunk_id"),
+        item.get("@search.score"),
+        )
+    #Tested heristic keyword reranking and it didnt work
+    # reranked_results = simple_rerank(
+    # filtered_results,
+    # request.question,
+    # )
+    
+    reranked_results=semantic_rerank(
+    filtered_results,
+    request.question,
+    )
+
+    print("\n=== RERANKED RESULTS ===")
+
+    for item in reranked_results:
+        print(
+        item.get("title"),
+        item.get("chunk_id"),
+        item.get("@search.score"),
+        item.get("semantic_rerank_score"),
+        )
+        
+    # sources, context_blocks = _build_context_blocks(filtered_results)
+    sources, context_blocks = _build_context_blocks(reranked_results)
 
     if not context_blocks:
         latency_ms = int((perf_counter() - start) * 1000)
