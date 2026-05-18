@@ -1,166 +1,316 @@
 # Azure GenAI Operations Copilot
 
 ## Overview
+
 Enterprise-style Retrieval-Augmented Generation (RAG) assistant built using FastAPI, Azure AI Search, and Azure OpenAI.
 
-This project simulates an internal operations copilot that answers questions using runbooks, SOPs, and troubleshooting documents.
+This project simulates an internal operations copilot capable of answering operational and troubleshooting questions using runbooks, SOPs, and support documentation.
+
+The system evolved from a basic hybrid retrieval pipeline into a more production-oriented retrieval architecture using semantic reranking, semantic chunking, observability, and cost-aware optimizations.
 
 ---
 
-## 🚀 Features
+# 🚀 Features
 
-- 🔍 Keyword-based search (Azure AI Search)
-- 🧠 Vector search using Azure OpenAI embeddings
-- ⚡ Hybrid retrieval (keyword + semantic search)
-- 📄 Document chunking and indexing
-- 🤖 Grounded LLM responses using retrieved context
-- 🧾 Source-backed answers
-- 🔧 Metadata filtering (department, doc_type)
-- Baseline evaluation for retrieval quality, latency, and token usage
-- Token and estimated cost tracking for LLM requests
-- Retrieval filtering to reduce noisy context and improve efficiency
+* 🔍 Keyword-based retrieval using Azure AI Search
+* 🧠 Vector search using Azure OpenAI embeddings
+* ⚡ Hybrid retrieval (keyword + vector search)
+* 🤖 Cross-encoder semantic reranking
+* ✂️ Semantic chunking for operational documents
+* 📄 Document ingestion and indexing pipeline
+* 🧾 Source-grounded LLM responses
+* 🔧 Metadata filtering (`department`, `doc_type`)
+* 📊 Baseline retrieval evaluation framework
+* 💰 Token usage and estimated cost tracking
+* ⏱️ Latency and request observability
+* 🎯 Semantic threshold filtering for cleaner prompts
 
 ---
 
-## 🏗️ Architecture
+# 🏗️ Architecture
 
 ```text
 Raw Documents (Azure Blob Storage)
         ↓
-PySpark Pipeline (chunking + metadata extraction)
-        ↓
-Processed Documents
+PySpark Pipeline
+(metadata extraction + semantic chunking)
         ↓
 Embedding Enrichment (Azure OpenAI)
         ↓
 Indexed Documents
         ↓
-Azure AI Search (Hybrid Retrieval)
+Azure AI Search
+(Hybrid Retrieval - top-k candidate generation)
         ↓
-FastAPI Backend (RAG)
+Cross-Encoder Semantic Reranking
+        ↓
+Semantic Threshold Filtering
+        ↓
+GPT-4o Response Generation
+        ↓
+FastAPI Backend
         ↓
 Frontend UI
-
-## ⚙️ Tech Stack
-
-- Backend: FastAPI (Python)
-- Frontend: HTML, CSS, JavaScript
-- Search: Azure AI Search (keyword + vector + hybrid)
-- LLM: Azure OpenAI (chat + embeddings)
-- Data Pipeline: PySpark
-- Storage: Azure Blob Storage
+```
 
 ---
 
-## 🧱 Data Pipeline
+# ⚙️ Tech Stack
 
-This project implements a multi-stage ingestion pipeline:
-
-1. Raw documents are stored in Azure Blob Storage
-2. PySpark pipeline performs:
-   - metadata extraction
-   - document chunking
-3. Embedding enrichment using Azure OpenAI
-4. Enriched documents are indexed into Azure AI Search
-
-This design separates preprocessing, enrichment, and indexing stages, aligning with production data engineering practices.
-
----
-
-## 📊 Observability & Production Considerations
-
-- Latency measurement for each query
-- Retrieval mode comparison (keyword vs vector vs hybrid)
-- Modular pipeline design for scalability
+| Layer             | Technology                             |
+| ----------------- | -------------------------------------- |
+| Backend           | FastAPI (Python)                       |
+| Frontend          | HTML, CSS, JavaScript                  |
+| Search            | Azure AI Search                        |
+| LLM               | Azure OpenAI                           |
+| Embeddings        | Azure OpenAI Embeddings                |
+| Semantic Reranker | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
+| Data Pipeline     | PySpark                                |
+| Storage           | Azure Blob Storage                     |
 
 ---
 
-## 🧠 Retrieval Modes
+# 🧱 Data Pipeline
 
-| Mode | Description |
-|------|------------|
-| Keyword | Exact text matching |
-| Vector | Semantic similarity using embeddings |
-| Hybrid | Combines keyword + vector (best results) |
+The project implements a multi-stage ingestion and retrieval pipeline.
 
----
+## 1. Raw Document Storage
 
-## 📈 Evaluation & Optimization
+Operational documents such as:
 
-To improve retrieval quality and reduce LLM cost, the system was evaluated using a baseline test suite across keyword, vector, and hybrid retrieval modes.
+* runbooks
+* SOPs
+* troubleshooting guides
 
-### Baseline Evaluation
-The project includes a repeatable evaluation script that measures:
-- latency per request
-- retrieved sources
-- prompt / completion / total tokens
-- estimated per-request LLM cost
-- answer quality across retrieval modes
-
-### Optimization Work
-After establishing the baseline, the retrieval pipeline was improved by:
-- reducing `top_k` from 5 to 3
-- limiting the number of chunks per document
-- filtering lower-value chunks before sending context to the LLM
-
-These changes reduced prompt size, improved source relevance, and lowered estimated cost.
-
-### Observability
-The API now tracks:
-- `request_id`
-- `latency_ms`
-- `prompt_tokens`
-- `completion_tokens`
-- `total_tokens`
-- `estimated_cost_usd`
-
-
-
+are stored in Azure Blob Storage.
 
 ---
 
-## 📈 Evaluation & Optimization (Recent Updates)
+## 2. Semantic Chunking Pipeline
 
-Recent improvements focused on making the system more production-ready and cost-efficient:
+A PySpark pipeline performs:
 
-### Baseline Evaluation
-- Implemented a reusable evaluation script to test queries across:
-  - keyword
-  - vector
-  - hybrid modes
-- Captures:
-  - latency (`latency_ms`)
-  - token usage (`prompt_tokens`, `completion_tokens`, `total_tokens`)
-  - estimated cost per request
-  - retrieved sources
+* metadata extraction
+* semantic chunking
+* structured document processing
 
-### Retrieval Optimization
-- Reduced `top_k` from **5 → 3**
-- Introduced **chunk filtering before LLM call**
-- Limited chunks per document to reduce redundancy
-- Improved context quality by removing low-relevance chunks
+The original implementation used fixed-size character chunking, which produced fragmented semantic context.
 
-### Impact
-- Lower prompt size and token usage
-- Reduced estimated cost per request
-- Cleaner and more relevant context sent to LLM
-- Improved answer quality and consistency
+The pipeline was later improved using section-aware semantic chunking based on operational document structure:
 
-### Observability Enhancements
-- Added request-level tracking:
-  - `request_id`
-  - `latency_ms`
-  - token usage
-  - estimated cost (`estimated_cost_usd`)
+* Overview
+* Preconditions
+* Restart Procedure
+* Validation Steps
+* Troubleshooting
 
-These updates align the system with **real-world GenAI production practices** including monitoring, cost-awareness, and iterative optimization.
+This produced coherent standalone semantic chunks and significantly improved reranking quality.
 
+---
 
-## 🧪 Sample Query
+## 3. Embedding Enrichment
+
+Each semantic chunk is enriched using Azure OpenAI embeddings before indexing into Azure AI Search.
+
+---
+
+## 4. Hybrid Retrieval
+
+Azure AI Search performs:
+
+* keyword retrieval
+* vector similarity retrieval
+* hybrid retrieval
+
+The retriever generates a broader candidate set (`top-k`) for downstream semantic reranking.
+
+---
+
+# 🧠 Semantic Reranking
+
+To improve retrieval precision and reduce noisy context, the project evolved from basic hybrid retrieval into a multi-stage semantic retrieval architecture.
+
+## Problem Identified
+
+Initial retrieval occasionally returned semantically weak or operationally unrelated chunks due to:
+
+* broad embedding similarity
+* keyword overlap
+* fragmented chunk boundaries
+
+Examples included unrelated troubleshooting documents appearing in billing restart queries.
+
+---
+
+## Cross-Encoder Semantic Reranking
+
+Implemented a second-stage semantic reranker using:
+
+```text
+cross-encoder/ms-marco-MiniLM-L-6-v2
+```
+
+The reranker evaluates:
+
+```text
+(query + document chunk)
+```
+
+together and assigns semantic relevance scores.
+
+This significantly improved:
+
+* retrieval precision
+* context quality
+* grounding quality
+* token efficiency
+
+compared to heuristic keyword-based reranking.
+
+---
+
+## Semantic Threshold Filtering
+
+After reranking, low-confidence chunks are removed before prompt construction.
+
+Benefits:
+
+* reduced noisy context
+* cleaner prompts
+* lower token usage
+* improved answer grounding
+* reduced hallucination risk
+
+---
+
+# 📈 Evaluation & Optimization
+
+The project includes a repeatable evaluation workflow to measure retrieval and generation quality.
+
+## Baseline Evaluation
+
+Implemented evaluation tooling that measures:
+
+* retrieval quality
+* latency per request
+* retrieved sources
+* prompt tokens
+* completion tokens
+* total tokens
+* estimated LLM cost
+
+---
+
+## Retrieval Optimization Journey
+
+The retrieval pipeline evolved through multiple stages:
+
+### Phase 1 — Baseline Hybrid Retrieval
+
+* keyword + vector retrieval
+* direct prompt construction
+
+### Phase 2 — Heuristic Reranking
+
+* keyword overlap boosts
+* title boosts
+* chunk filtering
+
+### Phase 3 — Semantic Cross-Encoder Reranking
+
+* semantic relevance scoring
+* improved operational precision
+* cleaner grounding
+
+### Phase 4 — Semantic Chunking
+
+* section-aware chunking
+* coherent semantic context
+* improved reranking quality
+
+---
+
+# 📊 Observability
+
+The API tracks request-level observability metrics including:
+
+* `request_id`
+* `latency_ms`
+* `prompt_tokens`
+* `completion_tokens`
+* `total_tokens`
+* `estimated_cost_usd`
+
+This enables:
+
+* retrieval benchmarking
+* token optimization
+* cost monitoring
+* performance analysis
+
+---
+
+# 🧪 Sample Query
 
 ```json
 {
   "question": "How do I safely restart the billing system?",
   "retrieval_mode": "hybrid",
-  "top_k": 3
+  "top_k": 10
 }
+```
+
+---
+
+# ✅ Example Improvements Achieved
+
+The final retrieval pipeline achieved:
+
+* cleaner retrieval results
+* removal of noisy operational documents
+* improved semantic relevance
+* lower prompt token usage
+* more focused grounded answers
+* improved retrieval explainability
+
+---
+
+# 🔮 Future Improvements
+
+Planned future enhancements include:
+
+* Query decomposition
+* Agentic retrieval workflows
+* Automated evaluation framework
+* Adaptive retrieval strategies
+* Streaming responses
+* Reranker latency optimization
+* Multi-query retrieval
+* Semantic caching
+
+---
+
+# 🧠 Key Learnings
+
+* Retrieval quality directly impacts answer quality.
+* Semantic chunking significantly improves reranking effectiveness.
+* Cross-encoder rerankers outperform heuristic keyword-based reranking for operational queries.
+* Candidate recall and semantic precision must be balanced carefully in production RAG systems.
+* Chunk boundary quality is critical for semantic retrieval systems.
+
+---
+
+# 📌 Final Retrieval Architecture
+
+```text
+Azure AI Search
+(Hybrid Retrieval - top 10 candidates)
+        ↓
+Cross-Encoder Semantic Reranking
+        ↓
+Semantic Threshold Filtering
+        ↓
+Top Relevant Semantic Chunks
+        ↓
+GPT-4o
+```
