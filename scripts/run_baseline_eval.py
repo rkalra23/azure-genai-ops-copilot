@@ -1,71 +1,179 @@
 import json
 import os
 from pathlib import Path
+from statistics import mean
+from typing import Any
 
 import requests
 
 API_URL = os.getenv("BASELINE_API_URL", "http://127.0.0.1:8000/ask")
-OUTPUT_FILE = Path("eval/baseline_results_with_top_k_3_and_filtered_results_with_score_min_2_doc.json")
+DATASET_FILE = Path("eval/datasets/rag_eval_dataset.jsonl")
+RESULTS_FILE = Path("eval/results/eval_results.json")
+SUMMARY_FILE = Path("eval/results/eval_summary.json")
 
-QUESTIONS = [
-    "How do I restart billing service?",
-    "What should I do if billing restart fails?",
-    "How do I handle a severity 1 incident?",
-    "How do I troubleshoot API timeout?",
-    "What is the escalation path if service health remains degraded?",
-    "How do I validate billing service health after restart?",
-    "What are the common causes of payment failure?",
-    "When should I escalate to L2 support?",
-]
 
-MODES = ["keyword", "vector", "hybrid"]
+def load_dataset(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        raise FileNotFoundError(f"Eval dataset not found: {path}")
+
+    cases = []
+    with path.open("r", encoding="utf-8") as f:
+        for line_number, line in enumerate(f, start=1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                cases.append(json.loads(line))
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"Invalid JSON on line {line_number}: {exc}") from exc
+
+    return cases
+
+
+def contains_any(text: str, expected_terms: list[str]) -> bool:
+    if not expected_terms:
+        return True
+
+    lowered = text.lower()
+    return any(term.lower() in lowered for term in expected_terms)
+
+
+def source_matches(sources: list[dict[str, Any]], expected_sources: list[str]) -> bool:
+    if not expected_sources:
+        return True
+
+    source_text = " ".join(
+        [
+            str(source.get("title", ""))
+            + " "
+            + str(source.get("doc_id", ""))
+            + " "
+            + str(source.get("chunk_id", ""))
+            for source in sources
+        ]
+    ).lower()
+
+    return any(expected.lower() in source_text for expected in expected_sources)
+
+
+def score_case(case: dict[str, Any], response_data: dict[str, Any]) -> tuple[bool, list[str]]:
+    failures = []
+
+    answer = response_data.get("answer") or ""
+    sources = response_data.get("sources") or []
+
+    requires_sources = case.get("requires_sources", True)
+    expected_no_answer = case.get("expected_no_answer", False)
+
+    expected_answer_terms_any = case.get("expected_answer_terms_any", [])
+    expected_sources_any = case.get("expected_sources_any", [])
+
+    if requires_sources and not sources:
+        failures.append("required_sources_missing")
+
+    if not source_matches(sources, expected_sources_any):
+        failures.append("expected_source_not_found")
+
+    if not contains_any(answer, expected_answer_terms_any):
+        failures.append("expected_answer_terms_not_found")
+
+    if expected_no_answer:
+        safe_fallback_terms = [
+            "could not find",
+            "not enough evidence",
+            "provided documents",
+            "cannot",
+            "do not have enough information",
+        ]
+        if not contains_any(answer, safe_fallback_terms):
+            failures.append("unsupported_question_not_handled_safely")
+
+    return len(failures) == 0, failures
+
+
+def run_case(case: dict[str, Any]) -> dict[str, Any]:
+    payload = {
+        "question": case["question"],
+        "retrieval_mode": case.get("retrieval_mode", "hybrid"),
+        "top_k": case.get("top_k", 3),
+    }
+
+    response = requests.post(API_URL, json=payload, timeout=120)
+    response.raise_for_status()
+    data = response.json()
+
+    passed, failures = score_case(case, data)
+
+    return {
+        "id": case["id"],
+        "question": case["question"],
+        "retrieval_mode": payload["retrieval_mode"],
+        "top_k": payload["top_k"],
+        "passed": passed,
+        "failures": failures,
+        "latency_ms": data.get("latency_ms"),
+        "request_id": data.get("request_id"),
+        "prompt_tokens": data.get("prompt_tokens"),
+        "completion_tokens": data.get("completion_tokens"),
+        "total_tokens": data.get("total_tokens"),
+        "estimated_cost_usd": data.get("estimated_cost_usd"),
+        "answer": data.get("answer"),
+        "sources": data.get("sources", []),
+    }
+
+
+def build_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
+    total = len(results)
+    passed = sum(1 for item in results if item["passed"])
+    failed = total - passed
+
+    latencies = [
+    item["latency_ms"]
+    for item in results
+    if isinstance(item.get("latency_ms"), (int, float))
+    ]
+
+    total_cost = sum(
+        item.get("estimated_cost_usd") or 0
+        for item in results
+    )
+
+    return {
+        "total_cases": total,
+        "passed": passed,
+        "failed": failed,
+        "pass_rate": round((passed / total) * 100, 2) if total else 0,
+        "average_latency_ms": round(mean(latencies), 2) if latencies else None,
+        "total_estimated_cost_usd": round(total_cost, 8),
+    }
 
 
 def main() -> None:
+    cases = load_dataset(DATASET_FILE)
+
     results = []
+    for case in cases:
+        print(f"Running eval | id={case['id']} | question={case['question']}")
+        result = run_case(case)
+        status = "PASS" if result["passed"] else "FAIL"
+        print(f"{status} | id={result['id']} | failures={result['failures']}")
+        results.append(result)
 
-    for question in QUESTIONS:
-        for mode in MODES:
-            payload = {
-                "question": question,
-                "retrieval_mode": mode,
-                "top_k": 3,
-            }
+    summary = build_summary(results)
 
-            print(f"Running | mode={mode} | question={question}")
-            response = requests.post(API_URL, json=payload, timeout=120)
-            response.raise_for_status()
-            data = response.json()
+    RESULTS_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-            results.append(
-                {
-                    "question": question,
-                    "mode": mode,
-                    "latency_ms": data.get("latency_ms"),
-                    "request_id": data.get("request_id"),
-                    "prompt_tokens":data.get("prompt_tokens"),
-                    "completion_tokens":data.get("completion_tokens"),
-                    "total_tokens": data.get("total_tokens"),
-                    "estimated_cost_usd": data.get("estimated_cost_usd"),
-                    "answer": data.get("answer"),
-                    "sources": [
-                        {
-                            "title": s.get("title"),
-                            "chunk_id": s.get("chunk_id"),
-                            "effective_date": s.get("effective_date"),
-                            "score": s.get("score"),
-                        }
-                        for s in data.get("sources", [])
-                    ],
-                    "notes": "",
-                }
-            )
-
-    OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+    with RESULTS_FILE.open("w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
 
-    print(f"Saved baseline results to {OUTPUT_FILE}")
+    with SUMMARY_FILE.open("w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2)
+
+    print("\nEval summary")
+    print(json.dumps(summary, indent=2))
+
+    if summary["failed"] > 0:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

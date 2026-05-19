@@ -1,6 +1,8 @@
 from time import perf_counter
 from uuid import uuid4
 
+import logging
+
 from azure.search.documents.models import VectorizedQuery
 
 from .config import get_settings
@@ -11,6 +13,9 @@ from .search_client import build_search_client
 ## rerank testing
 # from .rerank import simple_rerank
 from .semantic_rerank import semantic_rerank
+
+
+logger = logging.getLogger(__name__)
 
 def _build_filter(request: AskRequest) -> str | None:
     filters = []
@@ -100,7 +105,24 @@ def _filter_search_results(search_results, retrieval_mode: str, max_per_doc: int
         # per_doc_count[doc_id] = per_doc_count.get(doc_id, 0) + 1
 
     return filtered
-        
+
+def _summarize_results(search_results, include_rerank_score: bool = False) -> list[dict]:
+    summarized = []
+
+    for item in search_results:
+        row = {
+            "title": item.get("title"),
+            "chunk_id": item.get("chunk_id"),
+            "doc_id": item.get("doc_id"),
+            "search_score": item.get("@search.score"),
+        }
+
+        if include_rerank_score:
+            row["semantic_rerank_score"] = item.get("semantic_rerank_score")
+
+        summarized.append(row)
+
+    return summarized
 
 def answer_question(request: AskRequest, default_mode: str, default_top_k: int) -> AskResponse:
     settings = get_settings()
@@ -148,24 +170,23 @@ def answer_question(request: AskRequest, default_mode: str, default_top_k: int) 
             top=top_k,
             )
     results = list(results)
-    print("\n=== RAW RESULTS ===")
-
-    for item in results:
-        print(
-        item.get("title"),
-        item.get("chunk_id"),
-        item.get("@search.score"),
+    logger.info(
+    "raw_retrieval_results | request_id=%s mode=%s top_k=%s raw_count=%s results=%s",
+    request_id,
+    retrieval_mode,
+    top_k,
+    len(results),
+    _summarize_results(results),
+    )
+    filtered_results = _filter_search_results(results, retrieval_mode)
+    logger.info(
+    "filtered_retrieval_results | request_id=%s mode=%s filtered_count=%s results=%s",
+    request_id,
+    retrieval_mode,
+    len(filtered_results),
+    _summarize_results(filtered_results),
     )
     
-    filtered_results = _filter_search_results(results, retrieval_mode)
-    print("\n=== FILTERED RESULTS ===")
-
-    for item in filtered_results:
-        print(
-        item.get("title"),
-        item.get("chunk_id"),
-        item.get("@search.score"),
-        )
     #Tested heristic keyword reranking and it didnt work
     # reranked_results = simple_rerank(
     # filtered_results,
@@ -176,17 +197,14 @@ def answer_question(request: AskRequest, default_mode: str, default_top_k: int) 
     filtered_results,
     request.question,
     )
-
-    print("\n=== RERANKED RESULTS ===")
-
-    for item in reranked_results:
-        print(
-        item.get("title"),
-        item.get("chunk_id"),
-        item.get("@search.score"),
-        item.get("semantic_rerank_score"),
-        )
-        
+    
+    logger.info(
+    "reranked_retrieval_results | request_id=%s mode=%s reranked_count=%s results=%s",
+    request_id,
+    retrieval_mode,
+    len(reranked_results),
+    _summarize_results(reranked_results, include_rerank_score=True),
+    )    
     # sources, context_blocks = _build_context_blocks(filtered_results)
     sources, context_blocks = _build_context_blocks(reranked_results)
 

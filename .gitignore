@@ -26,4 +26,14 @@ data/indexed_docs/
 
 # Jupyter
 .ipynb_checkpoints/baseline_results.json
-eval/
+
+
+# Eval outputs are generated and should not be committed
+eval/*.json
+eval/results/
+eval/experiments/
+
+# Eval datasets are source-controlled
+!eval/
+!eval/datasets/
+!eval/datasets/*.jsonl
