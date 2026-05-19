@@ -1,26 +1,86 @@
 Title: Payment Failure Troubleshooting Guide
-Version: v2
+Version: v3
 Effective Date: 2025-12-20
 Department: Support
 Doc Type: troubleshooting
 
-Overview:
-This guide explains how to troubleshoot payment processing failures.
+## Overview
 
-Checks:
-1. Verify payment gateway availability.
+This guide describes the standard troubleshooting process for payment processing failures affecting customer transactions and downstream billing systems.
+
+## Symptoms
+
+Common indicators of payment processing failures include:
+
+* transaction timeout errors
+* failed payment acknowledgments
+* elevated retry attempts
+* duplicate transaction processing
+* delayed billing updates
+* payment gateway connection failures
+
+## Initial Validation
+
+Before remediation:
+
+1. Confirm whether the issue is isolated or affecting multiple customers.
+2. Validate payment gateway availability and health status.
+3. Check for recent deployment or configuration changes.
+4. Verify downstream billing services are operational.
+5. Review monitoring alerts and transaction dashboards.
+
+## Investigation Steps
+
+1. Verify payment gateway connectivity and response latency.
 2. Check for database connection pool exhaustion.
 3. Review timeout and retry logs.
-4. Confirm no certificate expiration issue exists.
-5. Validate downstream billing acknowledgment.
+4. Confirm no SSL certificate expiration or authentication issues exist.
+5. Validate downstream billing acknowledgment behavior.
+6. Inspect queue backlog for failed transaction retries.
+7. Review application memory and CPU utilization.
 
-Common Issues:
-- Gateway timeout
-- Invalid token exchange
-- Slow downstream acknowledgment
-- Database session exhaustion
+## Common Issues
 
-Resolution:
-- Restart payment-adapter if memory usage exceeds 85 percent.
-- Recycle stale connections.
-- Requeue failed transactions after dependency recovery.
+Typical root causes include:
+
+* gateway timeout
+* invalid token exchange
+* downstream acknowledgment delay
+* database session exhaustion
+* expired certificates
+* connection pool saturation
+* dependency service instability
+
+## Resolution Steps
+
+1. Restart the `payment-adapter` service if memory usage exceeds 85 percent.
+2. Recycle stale or exhausted database connections.
+3. Requeue failed transactions after dependency recovery.
+4. Renew expired certificates if authentication failures are detected.
+5. Scale service replicas if sustained transaction volume increases are observed.
+6. Clear blocked retry queues after validating dependency recovery.
+
+## Validation
+
+After remediation:
+
+1. Confirm payment success rate returns to normal thresholds.
+2. Validate transaction acknowledgment latency.
+3. Ensure retry queues are processing successfully.
+4. Monitor logs for recurring timeout or token errors.
+5. Confirm downstream billing synchronization resumes normally.
+
+## Troubleshooting Notes
+
+* Payment retries should not be manually triggered before dependency recovery is confirmed.
+* Frequent timeout failures may indicate upstream gateway instability.
+* Database exhaustion issues should be investigated for long-running queries or connection leaks.
+
+## Escalation
+
+Escalate to Support Engineering if:
+
+* payment failures persist for more than 15 minutes
+* retry queue backlog continues increasing
+* customer transaction impact becomes widespread
+* downstream billing synchronization remains dela

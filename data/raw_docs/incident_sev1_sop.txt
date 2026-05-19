@@ -1,20 +1,79 @@
 Title: Severity 1 Incident Handling SOP
-Version: v2
+Version: v3
 Effective Date: 2025-11-10
 Department: SRE
 Doc Type: sop
 
-Overview:
-This SOP defines the process for handling Severity 1 incidents.
+## Overview
 
-Procedure:
-1. Declare Severity 1 incident.
-2. Create incident bridge within 5 minutes.
-3. Notify stakeholders and leadership.
-4. Assign incident commander.
-5. Begin mitigation and status updates every 15 minutes.
-6. Document actions and timeline.
-7. Start post-incident review within 2 business days.
+This SOP defines the operational process for managing Severity 1 (Sev1) incidents involving critical production outages, widespread customer impact, or major platform degradation.
 
-Escalation:
-Escalate to senior leadership if customer impact exceeds 30 minutes.
+## Severity 1 Criteria
+
+A Severity 1 incident may include:
+
+* complete production outage
+* widespread customer impact
+* critical billing or payment failures
+* platform-wide authentication failures
+* major infrastructure instability
+* sustained service unavailability
+
+## Initial Response
+
+Within the first 5 minutes:
+
+1. Declare the Severity 1 incident.
+2. Create an incident bridge and communication channel.
+3. Assign an incident commander.
+4. Notify on-call engineers and SRE leadership.
+5. Begin impact assessment and service validation.
+
+## Incident Management Procedure
+
+1. Identify affected services and customer impact scope.
+2. Assign technical owners for each impacted component.
+3. Begin mitigation and containment activities.
+4. Provide status updates every 15 minutes.
+5. Maintain an active incident timeline and action log.
+6. Escalate unresolved blockers immediately.
+7. Coordinate rollback or recovery procedures if required.
+
+## Communication Protocol
+
+During the incident:
+
+1. Notify stakeholders and leadership teams.
+2. Provide periodic customer impact summaries.
+3. Maintain centralized incident notes.
+4. Ensure all mitigation decisions are documented.
+5. Coordinate external communication through approved channels.
+
+## Resolution & Recovery
+
+After mitigation:
+
+1. Confirm service stability across all impacted systems.
+2. Validate customer-facing functionality.
+3. Monitor recovery metrics and error rates.
+4. Close the incident bridge after stabilization.
+5. Archive incident logs and communication history.
+
+## Post-Incident Review
+
+Within 2 business days:
+
+1. Initiate post-incident review (PIR).
+2. Document root cause analysis.
+3. Identify contributing factors and operational gaps.
+4. Define corrective and preventive actions.
+5. Track remediation items to completion.
+
+## Escalation
+
+Escalate to senior leadership if:
+
+* customer impact exceeds 30 minutes
+* multiple critical systems are affected
+* mitigation efforts are unsuccessful
+* regulatory or financial impact is suspected

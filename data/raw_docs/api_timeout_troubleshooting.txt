@@ -1,19 +1,73 @@
 Title: API Timeout Troubleshooting
-Version: v1
+Version: v2
 Effective Date: 2026-02-01
 Department: Platform
 Doc Type: troubleshooting
 
-Overview:
-This guide covers timeout issues in internal APIs.
+## Overview
 
-Steps:
-1. Check upstream dependency latency.
-2. Review container CPU and memory usage.
-3. Validate thread pool utilization.
+This guide describes the standard troubleshooting process for internal API timeout issues affecting platform services and downstream integrations.
+
+## Symptoms
+
+Common timeout indicators include:
+
+* Increased API response latency
+* HTTP 504 or gateway timeout errors
+* Elevated retry counts
+* Partial request failures
+* Increased queue backlog
+* Client-side timeout exceptions
+
+## Initial Validation
+
+Before remediation:
+
+1. Confirm the impacted API endpoints.
+2. Validate whether the issue is isolated or system-wide.
+3. Check recent deployments or infrastructure changes.
+4. Review active alerts from monitoring systems.
+5. Verify whether downstream dependencies are operational.
+
+## Investigation Steps
+
+1. Check upstream dependency latency and service health.
+2. Review container CPU and memory utilization.
+3. Validate thread pool utilization and worker saturation.
 4. Inspect database slow query logs.
-5. Confirm no network policy changes were introduced.
-6. Increase timeout only after bottleneck confirmation.
+5. Review connection pool exhaustion metrics.
+6. Confirm no recent network policy or firewall changes were introduced.
+7. Validate load balancer health and routing behavior.
 
-Notes:
-Timeout changes without root-cause analysis are not approved for production.
+## Resolution Steps
+
+1. Restart affected application pods only if resource exhaustion is confirmed.
+2. Scale service replicas if sustained traffic increase is observed.
+3. Optimize slow database queries before increasing timeout values.
+4. Tune thread pool or connection pool limits if saturation occurs.
+5. Increase timeout thresholds only after root-cause confirmation.
+
+## Validation
+
+After remediation:
+
+1. Confirm API latency returns to normal thresholds.
+2. Validate successful request completion rates.
+3. Ensure no elevated retry counts remain.
+4. Monitor logs for recurring timeout exceptions.
+5. Confirm downstream services resume normal operation.
+
+## Troubleshooting Notes
+
+* Timeout increases without root-cause analysis are not approved for production.
+* Frequent timeout issues may indicate architectural bottlenecks or dependency instability.
+* Temporary mitigation steps should always be followed by permanent corrective action.
+
+## Escalation
+
+Escalate to Platform Engineering if:
+
+* timeouts persist for more than 15 minutes
+* multiple services are impacted simultaneously
+* database latency exceeds operational thresholds
+* infrastructure instability is suspected
