@@ -13,4 +13,5 @@ azure-monitor-opentelemetry==1.6.5
 pytest==8.3.5
 azure-storage-blob
 
-sentence-transformers==3.4.1
+## Not needed becoz we are using Azure sematic search
+#sentence-transformers==3.4.1

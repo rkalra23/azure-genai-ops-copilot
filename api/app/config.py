@@ -49,15 +49,35 @@ class Settings(BaseSettings):
         alias="DEFAULT_RETRIEVAL_MODE",
     )
     default_top_k: int = Field(default=5, alias="DEFAULT_TOP_K")
+
+    default_rerank_mode: str = Field(
+        default="azure_semantic",
+        alias="DEFAULT_RERANK_MODE",
+    )
+
+    final_context_top_n: int = Field(
+        default=3,
+        alias="FINAL_CONTEXT_TOP_N",
+    )
+
+    azure_search_semantic_config_name: str = Field(
+        default="default",
+        alias="AZURE_SEARCH_SEMANTIC_CONFIG_NAME",
+    )
+
+    enable_semantic_reranking: bool = Field(
+        default=False,
+        alias="ENABLE_SEMANTIC_RERANKING",
+    )
     
     azure_openai_input_cost_per_1m: float = Field(
-    default=0.0,
-    alias="AZURE_OPENAI_INPUT_COST_PER_1M",
+        default=0.0,
+        alias="AZURE_OPENAI_INPUT_COST_PER_1M",
     )
 
     azure_openai_output_cost_per_1m: float = Field(
-    default=0.0,
-    alias="AZURE_OPENAI_OUTPUT_COST_PER_1M",
+        default=0.0,
+        alias="AZURE_OPENAI_OUTPUT_COST_PER_1M",
     )
 
 

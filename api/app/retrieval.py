@@ -10,9 +10,11 @@ from .llm_client import build_llm_client
 from .models import AskRequest, AskResponse, SourceItem
 from .prompts import SYSTEM_PROMPT, build_user_prompt
 from .search_client import build_search_client
-## rerank testing
+## rerank testing  , going ahead with Azure semantic reranking,cross encpder is breaking the application
 # from .rerank import simple_rerank
-from .semantic_rerank import semantic_rerank
+#from .semantic_rerank import semantic_rerank
+##Azure Sematic reranking
+from azure.core.exceptions import HttpResponseError
 
 
 logger = logging.getLogger(__name__)
@@ -106,6 +108,20 @@ def _filter_search_results(search_results, retrieval_mode: str, max_per_doc: int
 
     return filtered
 
+def _looks_like_prompt_injection(question: str) -> bool:
+    patterns = [
+        "ignore previous instructions",
+        "ignore all previous instructions",
+        "reveal the system prompt",
+        "show me the system prompt",
+        "developer message",
+        "system message",
+        "jailbreak",
+    ]
+
+    normalized = question.lower()
+    return any(pattern in normalized for pattern in patterns)
+
 def _summarize_results(search_results, include_rerank_score: bool = False) -> list[dict]:
     summarized = []
 
@@ -124,6 +140,40 @@ def _summarize_results(search_results, include_rerank_score: bool = False) -> li
 
     return summarized
 
+def _apply_heuristic_rerank(search_results, question: str):
+    try:
+        from .rerank import simple_rerank
+
+        return simple_rerank(search_results, question)
+    except Exception:
+        logger.exception("heuristic_rerank_failed | fallback=filtered_results")
+        return search_results
+def _search_with_azure_semantic(
+    *,
+    search_client,
+    request: AskRequest,
+    search_filter: str | None,
+    top_k: int,
+    vector_query=None,
+    semantic_config_name: str,
+    ):
+    search_kwargs = {
+        "search_text": request.question,
+        "filter": search_filter,
+        "top": top_k,
+        "query_type": "semantic",
+        "semantic_configuration_name": semantic_config_name,
+        "query_caption": "extractive",
+        "query_answer": "extractive",
+    }
+
+    if vector_query is not None:
+        search_kwargs["vector_queries"] = [vector_query]
+
+    return search_client.search(**search_kwargs)
+
+
+
 def answer_question(request: AskRequest, default_mode: str, default_top_k: int) -> AskResponse:
     settings = get_settings()
     search_client = build_search_client(settings)
@@ -135,68 +185,121 @@ def answer_question(request: AskRequest, default_mode: str, default_top_k: int) 
     retrieval_mode = request.retrieval_mode or default_mode
     top_k = request.top_k or default_top_k
     search_filter = _build_filter(request)
-
-    if retrieval_mode == "keyword":
-        results = search_client.search(
-        search_text=request.question,
-        filter=search_filter,
-        top=top_k,
+    
+    rerank_mode = request.rerank_mode or settings.default_rerank_mode
+    actual_rerank_mode = rerank_mode
+    final_context_top_n = settings.final_context_top_n
+    
+    if _looks_like_prompt_injection(request.question):
+        latency_ms = int((perf_counter() - start) * 1000)
+        logger.warning(
+        "prompt_injection_blocked | request_id=%s retrieval_mode=%s rerank_mode=%s",
+        request_id,
+        retrieval_mode,
+        rerank_mode,
         )
-    else:
+
+        return AskResponse(
+        request_id=request_id,
+        answer=(
+            "I cannot follow instructions that attempt to override system or application behavior. "
+            "Please ask a question related to the indexed operations documents."
+        ),
+        retrieval_mode=retrieval_mode,
+        rerank_mode="blocked_prompt_injection",
+        top_k=top_k,
+        latency_ms=latency_ms,
+        raw_result_count=0,
+        filtered_result_count=0,
+        reranked_result_count=0,
+        final_context_count=0,
+        prompt_tokens=0,
+        completion_tokens=0,
+        total_tokens=0,
+        estimated_cost_usd=0.0,
+        sources=[],
+        )
+
+    vector_query = None
+    if retrieval_mode in ("vector", "hybrid"):
         query_embedding = _get_query_embedding(
         llm_client=llm_client,
         settings=settings,
         text=request.question,
         )
-
         vector_query = VectorizedQuery(
         vector=query_embedding,
         k_nearest_neighbors=top_k,
         fields="embedding",
         )
+    try:
+        if rerank_mode == "azure_semantic" and retrieval_mode in ("keyword", "hybrid"):
+            results_iter = _search_with_azure_semantic(
+            search_client=search_client,
+            request=request,
+            search_filter=search_filter,
+            top_k=top_k,
+            vector_query=vector_query if retrieval_mode == "hybrid" else None,
+            semantic_config_name=settings.azure_search_semantic_config_name,
+            )
+        elif retrieval_mode == "keyword":
+            results_iter = search_client.search(
+            search_text=request.question,
+            filter=search_filter,
+            top=top_k,)
+        elif retrieval_mode == "vector":
+            results_iter = search_client.search(
+            search_text=None,
+            vector_queries=[vector_query],
+            filter=search_filter,
+            top=top_k,)
+        else:
+            results_iter = search_client.search(
+            search_text=request.question,
+            vector_queries=[vector_query],
+            filter=search_filter,
+            top=top_k,)
 
-        if retrieval_mode == "vector":
-            results = search_client.search(
+        results = list(results_iter)
+    except HttpResponseError as exc:
+        logger.warning(
+        "azure_search_semantic_unavailable | request_id=%s rerank_mode=%s fallback=standard_%s error=%s",
+        request_id,
+        rerank_mode,
+        retrieval_mode,
+        str(exc).splitlines()[0],
+        )
+        actual_rerank_mode = f"standard_{retrieval_mode}_fallback"
+
+        if retrieval_mode == "keyword":
+            results_iter = search_client.search(
+            search_text=request.question,
+            filter=search_filter,
+            top=top_k,
+            )
+        elif retrieval_mode == "vector":
+            results_iter = search_client.search(
             search_text=None,
             vector_queries=[vector_query],
             filter=search_filter,
             top=top_k,
             )
-        else:  # hybrid
-            results = search_client.search(
+        else:
+            results_iter = search_client.search(
             search_text=request.question,
             vector_queries=[vector_query],
             filter=search_filter,
-            top=top_k,
-            )
-    results = list(results)
-    logger.info(
-    "raw_retrieval_results | request_id=%s mode=%s top_k=%s raw_count=%s results=%s",
-    request_id,
-    retrieval_mode,
-    top_k,
-    len(results),
-    _summarize_results(results),
-    )
+            top=top_k,)
+        results = list(results_iter)
     filtered_results = _filter_search_results(results, retrieval_mode)
-    logger.info(
-    "filtered_retrieval_results | request_id=%s mode=%s filtered_count=%s results=%s",
-    request_id,
-    retrieval_mode,
-    len(filtered_results),
-    _summarize_results(filtered_results),
-    )
     
-    #Tested heristic keyword reranking and it didnt work
-    # reranked_results = simple_rerank(
-    # filtered_results,
-    # request.question,
-    # )
-    
-    reranked_results=semantic_rerank(
-    filtered_results,
-    request.question,
-    )
+    if rerank_mode == "heuristic":
+        reranked_results = _apply_heuristic_rerank(
+        filtered_results,
+        request.question,
+        )
+    else:
+        reranked_results = filtered_results
     
     logger.info(
     "reranked_retrieval_results | request_id=%s mode=%s reranked_count=%s results=%s",
@@ -206,7 +309,20 @@ def answer_question(request: AskRequest, default_mode: str, default_top_k: int) 
     _summarize_results(reranked_results, include_rerank_score=True),
     )    
     # sources, context_blocks = _build_context_blocks(filtered_results)
-    sources, context_blocks = _build_context_blocks(reranked_results)
+    
+    final_results = reranked_results[:final_context_top_n]
+    logger.info(
+        "retrieval_pipeline_completed | request_id=%s retrieval_mode=%s rerank_mode=%s top_k=%s raw_count=%s filtered_count=%s reranked_count=%s final_context_count=%s",
+        request_id,
+        retrieval_mode,
+        rerank_mode,
+        top_k,
+        len(results),
+        len(filtered_results),
+        len(reranked_results),
+        len(final_results),
+        )
+    sources, context_blocks = _build_context_blocks(final_results)
 
     if not context_blocks:
         latency_ms = int((perf_counter() - start) * 1000)
@@ -214,19 +330,20 @@ def answer_question(request: AskRequest, default_mode: str, default_top_k: int) 
             request_id=request_id,
             answer="I could not find enough evidence in the indexed documents.",
             retrieval_mode=retrieval_mode,
+            rerank_mode=actual_rerank_mode,
             top_k=top_k,
             latency_ms=latency_ms,
+            raw_result_count=len(results),
+            filtered_result_count=len(filtered_results),
+            reranked_result_count=len(reranked_results),
+            final_context_count=0,
             sources=[],
-        )
+            )
 
     user_prompt = build_user_prompt(
         question=request.question,
         context_blocks=context_blocks,
     )
-    
-    print("DEPLOYMENT:", settings.azure_openai_chat_deployment)
-    print("ENDPOINT:", settings.azure_openai_endpoint)
-    print("API VERSION:", settings.azure_openai_api_version)
 
     completion = llm_client.chat.completions.create(
         model=settings.azure_openai_chat_deployment,
@@ -260,11 +377,16 @@ def answer_question(request: AskRequest, default_mode: str, default_top_k: int) 
         request_id=request_id,
         answer=answer,
         retrieval_mode=retrieval_mode,
+        rerank_mode=actual_rerank_mode,
         top_k=top_k,
         latency_ms=latency_ms,
+        raw_result_count=len(results),
+        filtered_result_count=len(filtered_results),
+        reranked_result_count=len(reranked_results),
+        final_context_count=len(final_results),
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
         total_tokens=total_tokens,
         estimated_cost_usd=estimated_cost_usd,
         sources=sources,
-    )
+        )

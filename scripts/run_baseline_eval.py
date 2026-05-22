@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from statistics import mean
 from typing import Any
+from openai import BadRequestError
 
 import requests
 
@@ -94,33 +95,62 @@ def score_case(case: dict[str, Any], response_data: dict[str, Any]) -> tuple[boo
 def run_case(case: dict[str, Any]) -> dict[str, Any]:
     payload = {
         "question": case["question"],
+        "rerank_mode": case.get("rerank_mode", "azure_semantic"),
         "retrieval_mode": case.get("retrieval_mode", "hybrid"),
         "top_k": case.get("top_k", 3),
     }
+    try:
+        response = requests.post(API_URL, json=payload, timeout=120)
+        response.raise_for_status()
+        data = response.json()
 
-    response = requests.post(API_URL, json=payload, timeout=120)
-    response.raise_for_status()
-    data = response.json()
+        passed, failures = score_case(case, data)
 
-    passed, failures = score_case(case, data)
-
-    return {
-        "id": case["id"],
-        "question": case["question"],
-        "retrieval_mode": payload["retrieval_mode"],
-        "top_k": payload["top_k"],
-        "passed": passed,
-        "failures": failures,
-        "latency_ms": data.get("latency_ms"),
-        "request_id": data.get("request_id"),
-        "prompt_tokens": data.get("prompt_tokens"),
-        "completion_tokens": data.get("completion_tokens"),
-        "total_tokens": data.get("total_tokens"),
-        "estimated_cost_usd": data.get("estimated_cost_usd"),
-        "answer": data.get("answer"),
-        "sources": data.get("sources", []),
-    }
-
+        return {
+         "id": case["id"],
+            "question": case["question"],
+            "retrieval_mode": payload["retrieval_mode"],
+            "rerank_mode": data.get("rerank_mode"),
+            "requested_rerank_mode": payload.get("rerank_mode"),
+            "top_k": payload["top_k"],
+            "passed": passed,
+            "failures": failures,
+            "latency_ms": data.get("latency_ms"),
+            "request_id": data.get("request_id"),
+            "raw_result_count": data.get("raw_result_count"),
+            "filtered_result_count": data.get("filtered_result_count"),
+            "reranked_result_count": data.get("reranked_result_count"),
+            "final_context_count": data.get("final_context_count"),
+            "prompt_tokens": data.get("prompt_tokens"),
+            "completion_tokens": data.get("completion_tokens"),
+            "total_tokens": data.get("total_tokens"),
+            "estimated_cost_usd": data.get("estimated_cost_usd"),
+            "answer": data.get("answer"),
+            "sources": data.get("sources", []),
+            }
+    except Exception as exc:
+        return {
+            "id": case.get("id"),
+            "question": case.get("question"),
+            "retrieval_mode": payload.get("retrieval_mode"),
+            "requested_rerank_mode": payload.get("rerank_mode"),
+            "rerank_mode": None,
+            "top_k": payload.get("top_k"),
+            "passed": False,
+            "failures": [f"eval_case_failed: {type(exc).__name__}: {exc}"],
+            "latency_ms": None,
+            "request_id": None,
+            "raw_result_count": None,
+            "filtered_result_count": None,
+            "reranked_result_count": None,
+            "final_context_count": None,
+            "prompt_tokens": None,
+            "completion_tokens": None,
+            "total_tokens": None,
+            "estimated_cost_usd": None,
+            "answer": None,
+            "sources": [],
+        }
 
 def build_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
     total = len(results)

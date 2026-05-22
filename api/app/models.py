@@ -13,6 +13,7 @@ class AskRequest(BaseModel):
     department: str | None = None
     doc_type: str | None = None
     retrieval_mode: Literal["keyword", "vector", "hybrid"] | None = None
+    rerank_mode: Literal["none", "heuristic", "azure_semantic"] | None = None
     top_k: int | None = Field(default=None, ge=1, le=20)
 
 
@@ -28,8 +29,13 @@ class AskResponse(BaseModel):
     request_id: str
     answer: str
     retrieval_mode: str
+    rerank_mode: str | None = None
     top_k: int
     latency_ms: int
+    raw_result_count: int | None = None
+    filtered_result_count: int | None = None
+    reranked_result_count: int | None = None
+    final_context_count: int | None = None
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     total_tokens: int | None = None

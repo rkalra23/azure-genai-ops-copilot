@@ -11,6 +11,10 @@ from azure.search.documents.indexes.models import (
     VectorSearch,
     HnswAlgorithmConfiguration,
     VectorSearchProfile,
+    SemanticSearch,
+    SemanticConfiguration,
+    SemanticPrioritizedFields,
+    SemanticField,
 )
 
 
@@ -57,8 +61,30 @@ def main() -> None:
         )
     ],
     )
+    
+    
+    semantic_search = SemanticSearch(
+        configurations=[
+            SemanticConfiguration(
+            name="default",
+            prioritized_fields=SemanticPrioritizedFields(
+                title_field=SemanticField(field_name="title"),
+                content_fields=[SemanticField(field_name="chunk_text"),
+                                ],
+                keywords_fields=[
+                    SemanticField(field_name="doc_type"),
+                    SemanticField(field_name="department"),],
+                ),
+            )
+            ]
+        )
 
-    index = SearchIndex(name=INDEX_NAME, fields=fields,vector_search=vector_search,)
+    index = SearchIndex(
+    name=INDEX_NAME,
+    fields=fields,
+    vector_search=vector_search,
+    semantic_search=semantic_search,
+    )
 
     existing = None
     try:
@@ -67,7 +93,8 @@ def main() -> None:
         existing = None
 
     if existing:
-        print(f"Index '{INDEX_NAME}' already exists.")
+        index_client.create_or_update_index(index)
+        print(f"Updated index '{INDEX_NAME}' successfully.")
     else:
         index_client.create_index(index)
         print(f"Created index '{INDEX_NAME}' successfully.")
