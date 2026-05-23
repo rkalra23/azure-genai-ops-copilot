@@ -33,6 +33,50 @@ def _build_filter(request: AskRequest) -> str | None:
 
     return " and ".join(filters)
 
+# Add a strength check:
+def _has_strong_evidence(question: str, results, retrieval_mode: str) -> bool:
+    if not results:
+        return False
+
+    stop_words = {
+        "what", "when", "where", "which", "with", "from", "this", "that",
+        "should", "could", "would", "have", "after", "before", "into",
+        "about", "there", "their", "then", "than", "does", "your", "you",
+        "the", "and", "for", "are", "how",
+    }
+
+    question_terms = {
+        token.strip(".,?!:;()[]{}").lower()
+        for token in question.split()
+        if len(token.strip(".,?!:;()[]{}")) >= 4
+    } - stop_words
+
+    if not question_terms:
+        return False
+
+    combined_text = " ".join(
+        f"{item.get('title', '')} {item.get('chunk_text', '')}"
+        for item in results
+    ).lower()
+
+    overlap_count = sum(1 for term in question_terms if term in combined_text)
+
+    # Require at least one meaningful query term to appear in retrieved evidence.
+    # This blocks out-of-domain questions like "capital of India".
+    if overlap_count == 0:
+        return False
+
+    # Keep only a light score floor because Azure semantic/hybrid scores are not
+    # always comparable across modes.
+    top_score = results[0].get("@search.score") or 0.0
+    thresholds = {
+        "keyword": 1.0,
+        "vector": 0.01,
+        "hybrid": 0.01,
+    }
+
+    return top_score >= thresholds.get(retrieval_mode, 0.01)
+
 
 def _build_context_blocks(search_results) -> tuple[list[SourceItem], list[str]]:
     sources: list[SourceItem] = []
@@ -311,6 +355,31 @@ def answer_question(request: AskRequest, default_mode: str, default_top_k: int) 
     # sources, context_blocks = _build_context_blocks(filtered_results)
     
     final_results = reranked_results[:final_context_top_n]
+    if not final_results or not _has_strong_evidence(request.question,final_results,retrieval_mode,):
+        latency_ms = int((perf_counter() - start) * 1000)
+        logger.info(
+        "skipping_llm_call | request_id=%s reason=%s top_score=%s",
+        request_id,
+        "no_results" if not final_results else "weak_evidence",
+        final_results[0].get("@search.score") if final_results else None,
+        )
+        return AskResponse(
+        request_id=request_id,
+        answer="I could not find enough evidence in the indexed documents to answer this question.",
+        retrieval_mode=retrieval_mode,
+        rerank_mode=actual_rerank_mode,
+        top_k=top_k,
+        latency_ms=latency_ms,
+        raw_result_count=len(results),
+        filtered_result_count=len(filtered_results),
+        reranked_result_count=len(reranked_results),
+        final_context_count=0,
+        prompt_tokens=0,
+        completion_tokens=0,
+        total_tokens=0,
+        estimated_cost_usd=0.0,
+        sources=[],
+        )
     logger.info(
         "retrieval_pipeline_completed | request_id=%s retrieval_mode=%s rerank_mode=%s top_k=%s raw_count=%s filtered_count=%s reranked_count=%s final_context_count=%s",
         request_id,
@@ -327,18 +396,22 @@ def answer_question(request: AskRequest, default_mode: str, default_top_k: int) 
     if not context_blocks:
         latency_ms = int((perf_counter() - start) * 1000)
         return AskResponse(
-            request_id=request_id,
-            answer="I could not find enough evidence in the indexed documents.",
-            retrieval_mode=retrieval_mode,
-            rerank_mode=actual_rerank_mode,
-            top_k=top_k,
-            latency_ms=latency_ms,
-            raw_result_count=len(results),
-            filtered_result_count=len(filtered_results),
-            reranked_result_count=len(reranked_results),
-            final_context_count=0,
-            sources=[],
-            )
+        request_id=request_id,
+        answer="I could not find enough evidence in the indexed documents.",
+        retrieval_mode=retrieval_mode,
+        rerank_mode=actual_rerank_mode,
+        top_k=top_k,
+        latency_ms=latency_ms,
+        raw_result_count=len(results),
+        filtered_result_count=len(filtered_results),
+        reranked_result_count=len(reranked_results),
+        final_context_count=0,
+        prompt_tokens=0,
+        completion_tokens=0,
+        total_tokens=0,
+        estimated_cost_usd=0.0,
+        sources=[],
+        )
 
     user_prompt = build_user_prompt(
         question=request.question,

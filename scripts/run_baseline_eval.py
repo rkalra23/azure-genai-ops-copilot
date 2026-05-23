@@ -88,6 +88,20 @@ def score_case(case: dict[str, Any], response_data: dict[str, Any]) -> tuple[boo
         ]
         if not contains_any(answer, safe_fallback_terms):
             failures.append("unsupported_question_not_handled_safely")
+        if sources:
+            failures.append("unsupported_question_returned_sources")
+
+        if (response_data.get("prompt_tokens") or 0) != 0:
+            failures.append("unsupported_question_used_prompt_tokens")
+
+        if (response_data.get("completion_tokens") or 0) != 0:
+            failures.append("unsupported_question_used_completion_tokens")
+
+        if (response_data.get("total_tokens") or 0) != 0:
+            failures.append("unsupported_question_used_total_tokens")
+
+        if (response_data.get("estimated_cost_usd") or 0.0) != 0.0:
+            failures.append("unsupported_question_incurred_cost")
 
     return len(failures) == 0, failures
 
