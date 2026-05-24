@@ -2,7 +2,7 @@ import logging
 from contextlib import asynccontextmanager 
 from fastapi.middleware.cors import CORSMiddleware
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.responses import JSONResponse
 
 from .config import get_settings
@@ -35,18 +35,21 @@ async def lifespan(app: FastAPI):
     logger.info("Stopping application: %s", settings.app_name)
 
 
+
 app = FastAPI(
     title=settings.app_name,
     version="0.1.0",
     lifespan=lifespan,
 )
 
+allowed_origins = [origin.strip() for origin in settings.allowed_origins.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=allowed_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "x-api-key"],
 )
 
 @app.get("/health", response_model=HealthResponse)
@@ -57,8 +60,19 @@ async def health() -> HealthResponse:
         environment=settings.app_env,
     )
 
+def require_api_key(x_api_key: str | None = Header(default=None)) -> None:
+    settings = get_settings()
 
-@app.post("/ask", response_model=AskResponse)
+    if not settings.app_api_key:
+        return
+
+    if x_api_key != settings.app_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API key.",
+        )
+
+@app.post("/ask", response_model=AskResponse,dependencies=[Depends(require_api_key)])
 async def ask(request: AskRequest) -> AskResponse:
     logger.info(f"Incoming request: {request}")
     return answer_question(

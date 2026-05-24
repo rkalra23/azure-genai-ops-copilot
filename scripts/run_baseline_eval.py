@@ -4,14 +4,24 @@ from pathlib import Path
 from statistics import mean
 from typing import Any
 from openai import BadRequestError
-
+from dotenv import load_dotenv
 import requests
+
 
 API_URL = os.getenv("BASELINE_API_URL", "http://127.0.0.1:8000/ask")
 DATASET_FILE = Path("eval/datasets/rag_eval_dataset.jsonl")
 RESULTS_FILE = Path("eval/results/eval_results.json")
 SUMMARY_FILE = Path("eval/results/eval_summary.json")
 
+
+load_dotenv()
+API_HEADERS = {
+    "Content-Type": "application/json",
+}
+api_key = os.getenv("APP_API_KEY", "")
+
+if api_key:
+    API_HEADERS["x-api-key"] = api_key
 
 def load_dataset(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
@@ -114,7 +124,7 @@ def run_case(case: dict[str, Any]) -> dict[str, Any]:
         "top_k": case.get("top_k", 3),
     }
     try:
-        response = requests.post(API_URL, json=payload, timeout=120)
+        response = response = requests.post(API_URL,json=payload,headers=API_HEADERS,timeout=120,)
         response.raise_for_status()
         data = response.json()
 

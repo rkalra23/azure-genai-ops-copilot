@@ -6,6 +6,8 @@ const topKInput = document.getElementById("topK");
 const answerBox = document.getElementById("answer");
 const metricsBox = document.getElementById("metrics");
 const sourcesList = document.getElementById("sources");
+const API_KEY = window.prompt("Enter demo API key:");
+
 
 function renderMetrics(data) {
   metricsBox.innerHTML = `
@@ -74,7 +76,8 @@ askBtn.addEventListener("click", async () => {
     const response = await fetch("http://127.0.0.1:8000/ask", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "x-api-key": API_KEY
       },
       body: JSON.stringify({
         question: question,

@@ -276,6 +276,21 @@ This enables:
 
 ---
 
+
+# 🔐 Security and Governance
+
+The project includes basic security and AI governance controls:
+
+* `/ask` is protected by API key authentication.
+* `/health` remains public for health checks.
+* CORS origins are configurable using `ALLOWED_ORIGINS`.
+* Prompt-injection attempts are blocked before retrieval or generation.
+* Weak or out-of-index evidence skips the LLM call and returns zero token cost.
+* Request-level token, latency, source, and cost metrics are returned.
+* Eval cases cover unsupported questions and guardrail behavior.
+
+See [`docs/security_governance.md`](docs/security_governance.md) for details.
+
 # 🧪 Sample API Request
 
 ```json

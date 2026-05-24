@@ -10,12 +10,17 @@ class Settings(BaseSettings):
         case_sensitive=True,
         extra="ignore",
     )
-
+    
+    
+    
     app_name: str = Field(default="azure-genai-ops-copilot", alias="APP_NAME")
     app_env: str = Field(default="dev", alias="APP_ENV")
     app_host: str = Field(default="0.0.0.0", alias="APP_HOST")
     app_port: int = Field(default=8000, alias="APP_PORT")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+    app_api_key: str = Field(default="", alias="APP_API_KEY")
+    
+    allowed_origins: str = Field(default="http://127.0.0.1:5500,http://localhost:5500",alias="ALLOWED_ORIGINS",)
 
     azure_openai_api_key: str = Field(default="", alias="AZURE_OPENAI_API_KEY")
     azure_openai_endpoint: str = Field(default="", alias="AZURE_OPENAI_ENDPOINT")
