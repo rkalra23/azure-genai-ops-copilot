@@ -7,6 +7,7 @@ const answerBox = document.getElementById("answer");
 const metricsBox = document.getElementById("metrics");
 const sourcesList = document.getElementById("sources");
 const API_KEY = window.prompt("Enter demo API key:");
+const API_BASE_URL = "https://ca-knowledgerk-api.kindglacier-855f7384.canadacentral.azurecontainerapps.io";
 
 
 function renderMetrics(data) {
@@ -73,7 +74,7 @@ askBtn.addEventListener("click", async () => {
   sourcesList.innerHTML = "";
 
   try {
-    const response = await fetch("http://127.0.0.1:8000/ask", {
+    const response = await fetch(`${API_BASE_URL}/ask`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
